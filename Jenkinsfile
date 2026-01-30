@@ -3,9 +3,11 @@ pipeline {
 
     environment {
         IMAGE_NAME = "python-devops-app-2:latest"
+        CONTAINER_NAME = "test-python-app-2"
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/giksone/gojo2.0.git'
@@ -30,15 +32,37 @@ pipeline {
             }
         }
 
+        stage('Test Application (Docker)') {
+            steps {
+                sh '''
+                eval $(minikube docker-env)
+
+                # Nettoyage si un conteneur test existe déjà
+                docker rm -f $CONTAINER_NAME || true
+
+                # Lancer le conteneur en test
+                docker run -d --name $CONTAINER_NAME -p 5001:5001 $IMAGE_NAME
+
+                # Attendre que l'app démarre
+                sleep 3
+
+                # Tester l'endpoint
+                curl -f http://127.0.0.1:5001/
+
+                # Arrêter le conteneur de test
+                docker stop $CONTAINER_NAME
+                docker rm $CONTAINER_NAME
+                '''
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
                 kubectl apply -f deployment.yaml
                 kubectl apply -f service.yaml
-                # Mettre à jour l'image du déploiement existant
-                kubectl set image deployment/python-app-2 python-app-2=$IMAGE_NAME
 
-                # Forcer le redéploiement pour récupérer la nouvelle image
+                kubectl set image deployment/python-app-2 python-app-2=$IMAGE_NAME
                 kubectl rollout restart deployment/python-app-2
                 '''
             }
@@ -47,6 +71,7 @@ pipeline {
         stage('Check Status') {
             steps {
                 sh '''
+                kubectl rollout status deployment/python-app-2
                 kubectl get pods
                 kubectl get services
                 '''
@@ -56,10 +81,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD Project 2 terminé avec succès"
+            echo "✅ CI/CD gojo2.0 terminé avec succès"
         }
         failure {
-            echo "❌ Erreur dans le pipeline Project 2"
+            echo "❌ Le pipeline a échoué (tests ou déploiement)"
         }
     }
 }
