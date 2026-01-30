@@ -20,7 +20,6 @@ pipeline {
         stage('Setup Minikube Docker Env') {
             steps {
                 echo "⚡ Configurer Docker pour Minikube"
-                // Configure Docker pour utiliser le Docker daemon de Minikube
                 sh 'eval $(minikube docker-env)'
             }
         }
@@ -28,7 +27,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Taguer l'image avec BUILD_NUMBER pour avoir une version unique
                     env.IMAGE_TAG = "${IMAGE_NAME}:${BUILD_NUMBER}"
                     echo "🐳 Build de l'image Docker avec tag ${IMAGE_TAG}"
                     sh "docker build -t ${IMAGE_TAG} ."
@@ -38,7 +36,7 @@ pipeline {
 
         stage('Clean Kubernetes') {
             steps {
-                echo "🧹 Nettoyage des anciens pods et services"
+                echo "🧹 Suppression des anciens déploiements et services"
                 sh "kubectl delete deployment ${DEPLOYMENT_NAME} --ignore-not-found"
                 sh "kubectl delete service ${SERVICE_NAME} --ignore-not-found"
             }
@@ -47,12 +45,9 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 echo "🚀 Déploiement Kubernetes"
-                // Applique le nouveau deployment et service
                 sh "kubectl apply -f deployment.yaml"
                 sh "kubectl apply -f service.yaml"
-                // Met à jour le déploiement avec la nouvelle image
                 sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${DEPLOYMENT_NAME}=${IMAGE_TAG}"
-                // Attend que tous les pods soient Running
                 sh "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
             }
         }
@@ -62,7 +57,7 @@ pipeline {
                 echo "✅ Vérification du service"
                 script {
                     def MINIKUBE_IP = sh(script: "minikube ip", returnStdout: true).trim()
-                    sh "sleep 5" // attendre que le service soit prêt
+                    sh "sleep 5"
                     sh "curl -f http://${MINIKUBE_IP}:${NODE_PORT}"
                 }
             }
@@ -71,7 +66,7 @@ pipeline {
 
     post {
         success {
-            echo "🎉 Pipeline terminé avec succès ! Application déployée sur Kubernetes"
+            echo "🎉 Pipeline terminé avec succès !"
         }
         failure {
             echo "❌ Le pipeline a échoué (tests ou déploiement)"
