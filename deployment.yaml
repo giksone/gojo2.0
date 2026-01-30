@@ -13,8 +13,8 @@ spec:
         app: python-app-2
     spec:
       containers:
-      - name: python-app-2
-        image: python-devops-app-2:latest
-        imagePullPolicy: **Never**  # ça dit de ne pas chercher dans un registre
-        ports:
-        - containerPort: 5001
+        - name: python-app-2
+          image: python-devops-app-2:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5001
