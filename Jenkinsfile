@@ -3,85 +3,73 @@ pipeline {
 
     environment {
         IMAGE_NAME = "python-devops-app-2:latest"
-        CONTAINER_NAME = "test-python-app-2"
+        DEPLOYMENT_NAME = "python-app-2"
+        SERVICE_NAME = "python-service-2"
+        NODE_PORT = "30001"
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/giksone/gojo2.0.git'
-            }
-        }
-
-        stage('Use Minikube Docker') {
-            steps {
-                sh '''
-                eval $(minikube docker-env)
-                docker info | grep Name
-                '''
+                echo "🔄 Checkout du repo Git"
+                git url: 'https://github.com/giksone/gojo2.0.git', branch: 'main'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                eval $(minikube docker-env)
-                docker build -t $IMAGE_NAME .
-                '''
+                echo "🐳 Build de l'image Docker"
+                sh "docker build -t ${IMAGE_NAME} ."
             }
         }
 
-        stage('Test Application (Docker)') {
+        stage('Test Local Container') {
             steps {
-                sh '''
-                eval $(minikube docker-env)
-
-                # Nettoyage si un conteneur test existe déjà
-                docker rm -f $CONTAINER_NAME || true
-
-                # Lancer le conteneur en test
-                docker run -d --name $CONTAINER_NAME -p 5001:5001 $IMAGE_NAME
-
-                # Attendre que l'app démarre
-                sleep 3
-
-                # Tester l'endpoint
-                curl -f http://127.0.0.1:5001/
-
-                # Arrêter le conteneur de test
-                docker stop $CONTAINER_NAME
-                docker rm $CONTAINER_NAME
-                '''
+                echo "⚡ Test local du container"
+                // Supprime un ancien container si existant
+                sh "docker rm -f test-python-app-2 || true"
+                // Lance le container
+                sh "docker run -d --name test-python-app-2 -p 5001:5001 ${IMAGE_NAME}"
+                // Test de la réponse
+                sh "sleep 5" // attendre que le container soit prêt
+                sh "curl -f http://127.0.0.1:5001"
+                // Stoppe et supprime le container de test
+                sh "docker rm -f test-python-app-2"
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-                kubectl apply -f deployment.yaml
-                kubectl apply -f service.yaml
+                echo "🚀 Déploiement Kubernetes"
+                // Supprime ancien déploiement et service si existants
+                sh "kubectl delete deployment ${DEPLOYMENT_NAME} --ignore-not-found"
+                sh "kubectl delete service ${SERVICE_NAME} --ignore-not-found"
 
-                kubectl set image deployment/python-app-2 python-app-2=$IMAGE_NAME
-                kubectl rollout restart deployment/python-app-2
-                '''
+                // Applique le nouveau deployment et service
+                sh "kubectl apply -f deployment.yaml"
+                sh "kubectl apply -f service.yaml"
+
+                // Force le redéploiement (utile si image a le même tag)
+                sh "kubectl rollout restart deployment ${DEPLOYMENT_NAME}"
             }
         }
 
         stage('Check Status') {
             steps {
-                sh '''
-                kubectl rollout status deployment/python-app-2
-                kubectl get pods
-                kubectl get services
-                '''
+                echo "✅ Vérification du service"
+                script {
+                    def MINIKUBE_IP = sh(script: "minikube ip", returnStdout: true).trim()
+                    sh "sleep 10" // attendre que les pods soient Running
+                    sh "curl -f http://${MINIKUBE_IP}:${NODE_PORT}"
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ CI/CD gojo2.0 terminé avec succès"
+            echo "🎉 Pipeline terminé avec succès !"
         }
         failure {
             echo "❌ Le pipeline a échoué (tests ou déploiement)"
