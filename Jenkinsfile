@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "python-devops-app-2:latest"
+        IMAGE_NAME = "python-devops-app-2"
         DEPLOYMENT_NAME = "python-app-2"
         SERVICE_NAME = "python-service-2"
         NODE_PORT = "30001"
@@ -19,8 +19,12 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo "🐳 Build de l'image Docker"
-                sh "docker build -t ${IMAGE_NAME} ."
+                script {
+                    // Taguer l'image avec BUILD_NUMBER pour avoir une version unique
+                    env.IMAGE_TAG = "${IMAGE_NAME}:${BUILD_NUMBER}"
+                    echo "🐳 Build de l'image Docker avec tag ${IMAGE_TAG}"
+                    sh "docker build -t ${IMAGE_TAG} ."
+                }
             }
         }
 
@@ -29,10 +33,11 @@ pipeline {
                 echo "⚡ Test local du container"
                 // Supprime un ancien container si existant
                 sh "docker rm -f test-python-app-2 || true"
-                // Lance le container
-                sh "docker run -d --name test-python-app-2 -p 5001:5001 ${IMAGE_NAME}"
-                // Test de la réponse
-                sh "sleep 5" // attendre que le container soit prêt
+                // Lance le container pour test
+                sh "docker run -d --name test-python-app-2 -p 5001:5001 ${IMAGE_TAG}"
+                // Attendre que le container soit prêt
+                sh "sleep 5"
+                // Vérifier que l'application répond
                 sh "curl -f http://127.0.0.1:5001"
                 // Stoppe et supprime le container de test
                 sh "docker rm -f test-python-app-2"
@@ -50,8 +55,10 @@ pipeline {
                 sh "kubectl apply -f deployment.yaml"
                 sh "kubectl apply -f service.yaml"
 
-                // Force le redéploiement (utile si image a le même tag)
-                sh "kubectl rollout restart deployment ${DEPLOYMENT_NAME}"
+                // Met à jour le déploiement avec la nouvelle image
+                sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${DEPLOYMENT_NAME}=${IMAGE_TAG}"
+                // Attend que tous les pods soient Running
+                sh "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
             }
         }
 
@@ -60,7 +67,8 @@ pipeline {
                 echo "✅ Vérification du service"
                 script {
                     def MINIKUBE_IP = sh(script: "minikube ip", returnStdout: true).trim()
-                    sh "sleep 10" // attendre que les pods soient Running
+                    // Attendre que les pods soient prêts
+                    sh "sleep 10"
                     sh "curl -f http://${MINIKUBE_IP}:${NODE_PORT}"
                 }
             }
