@@ -9,7 +9,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 echo "🔄 Checkout du repo Git"
@@ -24,21 +23,20 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Clean Old Resources') {
             steps {
-                script {
-                    env.IMAGE_TAG = "${IMAGE_NAME}:${BUILD_NUMBER}"
-                    echo "🐳 Build de l'image Docker avec tag ${IMAGE_TAG}"
-                    sh "docker build -t ${IMAGE_TAG} ."
-                }
+                echo "🧹 Suppression des anciens déploiements, services et images"
+                sh "kubectl delete deployment ${DEPLOYMENT_NAME} --ignore-not-found"
+                sh "kubectl delete service ${SERVICE_NAME} --ignore-not-found"
+                sh "kubectl delete pod -l app=${DEPLOYMENT_NAME} --ignore-not-found"
+                sh "docker rmi -f ${IMAGE_NAME}:latest || true"
             }
         }
 
-        stage('Clean Kubernetes') {
+        stage('Build Docker Image') {
             steps {
-                echo "🧹 Suppression des anciens déploiements et services"
-                sh "kubectl delete deployment ${DEPLOYMENT_NAME} --ignore-not-found"
-                sh "kubectl delete service ${SERVICE_NAME} --ignore-not-found"
+                echo "🐳 Build de l'image Docker"
+                sh "docker build -t ${IMAGE_NAME}:latest ."
             }
         }
 
@@ -47,7 +45,6 @@ pipeline {
                 echo "🚀 Déploiement Kubernetes"
                 sh "kubectl apply -f deployment.yaml"
                 sh "kubectl apply -f service.yaml"
-                sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${DEPLOYMENT_NAME}=${IMAGE_TAG}"
                 sh "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
             }
         }
@@ -69,7 +66,7 @@ pipeline {
             echo "🎉 Pipeline terminé avec succès !"
         }
         failure {
-            echo "❌ Le pipeline a échoué (tests ou déploiement)"
+            echo "❌ Le pipeline a échoué"
         }
     }
 }

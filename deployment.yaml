@@ -15,6 +15,6 @@ spec:
       containers:
         - name: python-app-2
           image: python-devops-app-2:latest
-          imagePullPolicy: Never
+          imagePullPolicy: Never   # 🔑 Utilise l'image locale si disponible
           ports:
             - containerPort: 5001
